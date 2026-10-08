@@ -9,7 +9,9 @@
     "watch": "esbuild src/main.js --bundle --sourcemap --format=iife --target=es2018 --outfile=www/app.js --servedir=www",
     "sync": "npm run bundle && npx cap sync android",
     "build:apk": "npm run sync && cd android && gradlew.bat assembleDebug",
-    "build:aab": "npm run sync && cd android && gradlew.bat bundleRelease"
+    "build:aab": "npm run sync && cd android && gradlew.bat bundleRelease",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "npm run bundle && node test/e2e.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.0.0",
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "puppeteer-core": "^23.11.1"
   }
 }
