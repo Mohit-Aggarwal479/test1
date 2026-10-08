@@ -1,6 +1,6 @@
 {
-  "appId": "com.mohitaggarwal.randomapp",
-  "appName": "Random App",
+  "appId": "com.mohitaggarwal.fuse",
+  "appName": "Fuse",
   "webDir": "www",
   "android": {
     "allowMixedContent": false,

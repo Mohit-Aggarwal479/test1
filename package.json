@@ -6,7 +6,7 @@
   "description": "Mobile game (HTML5 Canvas + Capacitor Android)",
   "scripts": {
     "bundle": "esbuild src/main.js --bundle --minify --sourcemap --format=iife --target=es2018 --outfile=www/app.js",
-    "watch": "esbuild src/main.js --bundle --sourcemap --format=iife --target=es2018 --outfile=www/app.js --watch --servedir=www",
+    "watch": "esbuild src/main.js --bundle --sourcemap --format=iife --target=es2018 --outfile=www/app.js --servedir=www",
     "sync": "npm run bundle && npx cap sync android",
     "build:apk": "npm run sync && cd android && gradlew.bat assembleDebug",
     "build:aab": "npm run sync && cd android && gradlew.bat bundleRelease"

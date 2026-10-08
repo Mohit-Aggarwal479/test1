@@ -9,7 +9,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { App } from '@capacitor/app';
 
-const STORE_URL = 'https://play.google.com/store/apps/details?id=com.mohitaggarwal.randomapp';
+const STORE_URL = 'https://play.google.com/store/apps/details?id=com.mohitaggarwal.fuse';
 const ENDLESS_N = 7;
 const ENDLESS_TAPS = 10;
 const BIG_CHAIN = 12; // a chain this long refunds the tap
@@ -30,10 +30,19 @@ async function load() {
   const s = await storage.get('fuse.save', null);
   if (s && s.v === 1) save = deepMerge(structuredClone(DEFAULT_SAVE), s);
 }
-function deepMerge(base, over) {
-  for (const k of Object.keys(over || {})) {
-    if (over[k] && typeof over[k] === 'object' && !Array.isArray(over[k]) && base[k] && typeof base[k] === 'object') deepMerge(base[k], over[k]);
-    else base[k] = over[k];
+// Merge saved data over defaults. Only known keys of matching type are accepted,
+// except inside open maps (daily, repairs) whose keys are dates.
+const OPEN_MAPS = new Set(['daily', 'repairs']);
+function deepMerge(base, over, open = false) {
+  if (!over || typeof over !== 'object' || Array.isArray(over)) return base;
+  for (const k of Object.keys(over)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    const b = base[k], o = over[k];
+    if (open) { base[k] = o; continue; }
+    if (!(k in base)) continue;
+    if (b && typeof b === 'object' && !Array.isArray(b)) {
+      if (o && typeof o === 'object' && !Array.isArray(o)) deepMerge(b, o, OPEN_MAPS.has(k));
+    } else if (typeof b === typeof o) base[k] = o;
   }
   return base;
 }
@@ -174,16 +183,14 @@ const SCREENS = {
         <p class="sub center" style="margin-top:18px">New board every midnight. Your streak counts plays, not perfect scores.</p>
       </div>
     </div>`);
-    $('#dailyCard', el).onclick = () => { sound.unlock(); show('daily', k); };
+    $('#dailyCard', el).onclick = () => { sound.unlock(); if (dateKey(today()) !== k) { show('home'); return; } show('daily', k); };
     $('#endlessCard', el).onclick = () => { sound.unlock(); show('endless'); };
     $('#mapBtn', el).onclick = () => show('map');
     $('#statsBtn', el).onclick = () => openStats();
     $('#howBtn', el).onclick = () => show('tutorial');
     $('#setBtn', el).onclick = () => openSettings();
-    if (d) {
-      const upd = () => { const c = $('#cd', el); if (c) c.textContent = fmtHMS(msToMidnight()); if (dateKey(today()) !== k) show('home'); };
-      upd(); tickTimer = setInterval(upd, 1000);
-    }
+    const upd = () => { if (dateKey(today()) !== k) { show('home'); return; } const c = $('#cd', el); if (c) c.textContent = fmtHMS(msToMidnight()); };
+    upd(); tickTimer = setInterval(upd, 1000);
     return el;
   },
 
@@ -202,6 +209,8 @@ const SCREENS = {
     const hint = $('.hint', el);
     const actions = $('.actions', el);
     view = makeView(el);
+    const myView = view;
+    const alive = () => view === myView;
     view.setBoard(board, prev ? maskToBurnt(prev.m) : null);
     view.start();
 
@@ -213,7 +222,7 @@ const SCREENS = {
     } else {
       $('#hScore', el).textContent = prev.s; $('#hBest', el).textContent = prev.b;
       hint.textContent = 'Already played. Come back at midnight for a new board.';
-      setTimeout(() => showDailyResult(), 250);
+      setTimeout(() => { if (alive()) showDailyResult(); }, 250);
     }
     bindTap(view, (cell) => {
       if (committed) return;
@@ -228,9 +237,7 @@ const SCREENS = {
       committed = true; lightBtn.remove(); view.selected = null;
       hint.textContent = '';
       const res = simulate(board, selected.r, selected.c);
-      await playChain(view, res, $('#hScore', el));
       const perfect = res.count >= optimal.count;
-      $('#hBest', el).textContent = optimal.count;
       const rec = { s: res.count, b: optimal.count, m: burntToMask(board, res.burnt), t: [selected.r, selected.c] };
       if (!save.daily[k]) {
         save.daily[k] = rec;
@@ -240,9 +247,13 @@ const SCREENS = {
         save.stats.biggest = Math.max(save.stats.biggest, res.count);
         const sr = isToday ? recordStreak(k) : { changed: false };
         persist();
-        if (sr.usedFreeze) toast(`❄️ Streak freeze used`);
-        if (sr.earnedFreeze) setTimeout(() => toast('❄️ 7-day streak! Earned a streak freeze'), 1200);
+        if (sr.usedFreeze) setTimeout(() => toast('❄️ Streak freeze used'), 2500);
+        if (sr.earnedFreeze) setTimeout(() => toast('❄️ 7-day streak! Earned a streak freeze'), 3500);
       }
+      // result is saved before the animation so leaving mid-chain can't grant a retry
+      await playChain(view, res, $('#hScore', el));
+      if (!alive()) return;
+      $('#hBest', el).textContent = optimal.count;
       sound.fanfare(perfect); buzz(perfect ? 'success' : 'medium');
       showDailyResult(true);
     }
@@ -274,9 +285,9 @@ const SCREENS = {
         closeSheet();
         view.setBoard(board); view.pulse = { r: optimal.r, c: optimal.c };
         hint.textContent = gap === 0 ? 'Your perfect chain' : `Best start: row ${optimal.r + 1}, col ${optimal.c + 1}`;
-        await sleep(700); view.pulse = null;
+        await sleep(700); if (!alive()) return; view.pulse = null;
         await playChain(view, simulate(board, optimal.r, optimal.c), $('#hScore', el), 1.2);
-        await sleep(600);
+        await sleep(600); if (!alive()) return;
         view.setBoard(board, maskToBurnt(r.m));
         $('#hScore', el).textContent = r.s;
         showDailyResult();
@@ -305,7 +316,7 @@ const SCREENS = {
         const res = simulate(board, cell.r, cell.c);
         await playChain(view, res, $('#hScore', el));
         hint.textContent = `Practice: ${res.count} / ${optimal.count}`;
-        await sleep(900);
+        await sleep(900); if (!alive()) return;
         view.setBoard(board, maskToBurnt(save.daily[k].m));
         $('#hScore', el).textContent = save.daily[k].s;
         showDailyResult();
@@ -325,6 +336,7 @@ const SCREENS = {
     let board = generateBoard(ENDLESS_N, seed).board;
     let taps = ENDLESS_TAPS, score = 0, busy = false, revived = false, previewLeft = 1, previewOn = false, biggest = 0, sel = null;
     view = makeView(el);
+    const myView = view;
     view.setBoard(board); view.start();
     hint.textContent = 'Tap a tile to select, tap again to light it.';
     const prevBtn = h(`<button class="btn small ad">Preview spark</button>`);
@@ -360,6 +372,7 @@ const SCREENS = {
       const col = collapse(board, res.burnt, rng);
       board = col.board;
       await view.dropIn(board, col.moves);
+      if (view !== myView) return;
       busy = false;
       if (taps <= 0) roundOver();
     });
@@ -367,7 +380,7 @@ const SCREENS = {
     function roundOver() {
       busy = true;
       const isBest = score > save.endless.best;
-      save.endless.rounds++;
+      if (!revived) save.endless.rounds++;
       if (isBest) save.endless.best = score;
       const wk = isoWeekKey();
       if (save.endless.weekKey !== wk) { save.endless.weekKey = wk; save.endless.week = 0; }
@@ -393,9 +406,18 @@ const SCREENS = {
       if (rb) rb.onclick = async () => {
         if (!(await rewarded('+3 taps'))) return;
         revived = true; taps += 3; busy = false; upd(); closeSheet(); hint.textContent = '+3 taps. Make them count!';
+        $('#resBtn', actions)?.remove();
       };
-      $('#againBtn', sheet).onclick = async () => { await maybeInterstitial(); show('endless'); };
-      $('#homeE', sheet).onclick = async () => { await maybeInterstitial(); show('home'); };
+      let leaving = false;
+      const leave = async (to) => { if (leaving) return; leaving = true; await maybeInterstitial(); if (view === myView) show(to); };
+      $('#againBtn', sheet).onclick = () => leave('endless');
+      $('#homeE', sheet).onclick = () => leave('home');
+      // the sheet can be dismissed; keep a way back to it on screen
+      prevBtn.remove();
+      $('#resBtn', actions)?.remove();
+      const resBtn = h(`<button class="btn primary" id="resBtn">Results</button>`);
+      resBtn.onclick = () => openSheet(sheet);
+      actions.appendChild(resBtn);
       $('#shareE', sheet).onclick = () => share({
         title: 'FUSE',
         text: `FUSE Endless 🔥 ${score} points · biggest chain ${biggest}${isBest ? ' · new personal best!' : ''}\nCan you beat it? ${STORE_URL}`,
@@ -641,6 +663,7 @@ async function shareWithImage(text, dataUrl, name) {
       await Share.share({ text, files: [f.uri], dialogTitle: 'Share' });
       return true;
     } catch (e) {
+      if (/cancel|in progress/i.test(String(e?.message ?? e))) return false;
       return share({ title: 'FUSE', text });
     }
   }
@@ -702,7 +725,7 @@ function openSettings() {
     try {
       const data = JSON.parse(decodeURIComponent(escape(atob(raw.trim().replace(/^FUSE-BACKUP:/, '')))));
       if (data.v !== 1) throw 0;
-      save = deepMerge(structuredClone(DEFAULT_SAVE), data); persist(); toast('Progress restored'); show('home');
+      save = deepMerge(structuredClone(DEFAULT_SAVE), data); sound.setEnabled(save.settings.sound); persist(); toast('Progress restored'); show('home');
     } catch { toast('That code did not work'); }
   };
   const pv = $('#privacy', el);
@@ -719,7 +742,7 @@ App.addListener('backButton', () => {
   App.exitApp();
 }).catch?.(() => {});
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && current === 'home') show('home');
+  if (document.visibilityState === 'visible' && current === 'home' && !sheetOpen) show('home');
 });
 
 (async function boot() {
@@ -728,9 +751,10 @@ document.addEventListener('visibilitychange', () => {
   persist();
   sound.setEnabled(save.settings.sound);
   setupSystemUI('#0e0d13');
-  ads.init();
+  ads.init().then(() => { if (current) bannerFor(current); });
   if (!save.onboarded) show('tutorial'); else show('home');
 })();
 
 // dev hook for automated checks
 window.__fuse = { get save() { return save; }, show, generateBoard, simulate };
+Object.defineProperty(window, "__fuseView", { get: () => view });

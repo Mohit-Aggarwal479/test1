@@ -63,10 +63,10 @@ export function randomBoard(n, rng, density = DENSITY) {
   return makeBoard(n, cells);
 }
 
-/** Generate a board whose optimal chain burns 35%..75% of burnable tiles. */
+/** Generate a board whose optimal chain burns 50%..85% of burnable tiles. */
 export function generateBoard(n, seed, opts = {}) {
   const rng = mulberry32(seed);
-  const lo = opts.minFrac ?? 0.35, hi = opts.maxFrac ?? 0.75;
+  const lo = opts.minFrac ?? 0.50, hi = opts.maxFrac ?? 0.85;
   let board = null, best = null;
   for (let attempt = 0; attempt < 200; attempt++) {
     board = randomBoard(n, rng);
@@ -127,7 +127,8 @@ export function simulate(board, r0, c0, burntIn) {
   };
 
   let sparks = [];
-  enterTile(start, 0, sparks, cells[start].d);
+  // a tapped splitter fires left/right, matching its glyph
+  enterTile(start, 0, sparks, cells[start].t === TILE.SPLIT ? DIR.U : cells[start].d);
   let step = 1;
   while (sparks.length && step < 4096) {
     const next = [];
@@ -206,7 +207,7 @@ export function collapse(board, burnt, rng) {
 
 // ---------- Share helpers ----------
 /** Emoji silhouette of burnt tiles; does not reveal the tapped tile. */
-export function emojiSilhouette(board, burnt, { burntEmoji = 'ðŸŸ§', emptyEmoji = 'â¬›', wallEmoji = 'â¬œ' } = {}) {
+export function emojiSilhouette(board, burnt, { burntEmoji = '\u{1F7E7}', emptyEmoji = '\u2B1B', wallEmoji = '\u2B1C' } = {}) {
   const { n, cells } = board;
   const rows = [];
   for (let r = 0; r < n; r++) {

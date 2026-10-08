@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Random App</string>
-    <string name="title_activity_main">Random App</string>
-    <string name="package_name">com.mohitaggarwal.randomapp</string>
-    <string name="custom_url_scheme">com.mohitaggarwal.randomapp</string>
+    <string name="app_name">Fuse</string>
+    <string name="title_activity_main">Fuse</string>
+    <string name="package_name">com.mohitaggarwal.fuse</string>
+    <string name="custom_url_scheme">com.mohitaggarwal.fuse</string>
     <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>

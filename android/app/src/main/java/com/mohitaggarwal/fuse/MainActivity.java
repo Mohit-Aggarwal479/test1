@@ -1,4 +1,4 @@
-package com.mohitaggarwal.randomapp;
+package com.mohitaggarwal.fuse;
 
 import com.getcapacitor.BridgeActivity;
 

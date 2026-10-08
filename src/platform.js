@@ -87,12 +87,14 @@ let interstitialReady = false;
 let rewardedReady = false;
 let adsRemoved = false;
 let initialized = false;
+let canRequestAds = false;
+let rewardInFlight = null;
 let bannerVisible = false;
 let bannerHeight = 0;
 const listeners = { bannerSize: [] };
 
 export const ads = {
-  get enabled() { return isNative && initialized && !adsRemoved; },
+  get enabled() { return isNative && initialized && canRequestAds && !adsRemoved; },
   get bannerHeight() { return bannerVisible ? bannerHeight : 0; },
   onBannerSize(fn) { listeners.bannerSize.push(fn); },
 
@@ -104,12 +106,15 @@ export const ads = {
       initialized = true;
       // UMP consent (EU/UK). Fails soft outside consent regions.
       try {
-        const info = await AdMob.requestConsentInfo();
-        if (info.isConsentFormAvailable && info.status === 'REQUIRED') await AdMob.showConsentForm();
-      } catch {}
+        let info = await AdMob.requestConsentInfo();
+        if (info.isConsentFormAvailable && info.status === 'REQUIRED') info = await AdMob.showConsentForm();
+        canRequestAds = !!info.canRequestAds;
+      } catch { canRequestAds = false; }
       AdMob.addListener(InterstitialAdPluginEvents.Loaded, () => { interstitialReady = true; });
       AdMob.addListener(InterstitialAdPluginEvents.FailedToLoad, () => { interstitialReady = false; setTimeout(() => ads.preloadInterstitial(), 30_000); });
       AdMob.addListener(InterstitialAdPluginEvents.Dismissed, () => { interstitialReady = false; ads.preloadInterstitial(); });
+      AdMob.addListener(InterstitialAdPluginEvents.FailedToShow, () => { interstitialReady = false; ads.preloadInterstitial(); });
+      AdMob.addListener(RewardAdPluginEvents.FailedToShow, () => { rewardedReady = false; ads.preloadRewarded(); });
       AdMob.addListener(RewardAdPluginEvents.Loaded, () => { rewardedReady = true; });
       AdMob.addListener(RewardAdPluginEvents.FailedToLoad, () => { rewardedReady = false; setTimeout(() => ads.preloadRewarded(), 30_000); });
       AdMob.addListener(RewardAdPluginEvents.Dismissed, () => { rewardedReady = false; ads.preloadRewarded(); });
@@ -140,7 +145,8 @@ export const ads = {
       const finish = (v) => { if (!done) { done = true; resolve(v); } };
       const h1 = await AdMob.addListener(InterstitialAdPluginEvents.Dismissed, () => { h1.remove(); h2.remove(); finish(true); });
       const h2 = await AdMob.addListener(InterstitialAdPluginEvents.FailedToShow, () => { h1.remove(); h2.remove(); finish(false); });
-      try { await AdMob.showInterstitial(); } catch { h1.remove(); h2.remove(); finish(false); }
+      interstitialReady = false;
+      try { await AdMob.showInterstitial(); } catch { h1.remove(); h2.remove(); finish(false); ads.preloadInterstitial(); }
       setTimeout(() => finish(false), 60_000);
     });
   },
@@ -149,16 +155,20 @@ export const ads = {
 
   /** Show rewarded ad; resolves true only if the user earned the reward. */
   async showRewarded() {
+    if (rewardInFlight) return rewardInFlight;
     if (!ads.enabled || !rewardedReady) return false;
-    return new Promise(async (resolve) => {
+    rewardedReady = false; // an ad object can only be shown once
+    rewardInFlight = new Promise(async (resolve) => {
       let rewarded = false, done = false;
-      const finish = () => { if (!done) { done = true; hR.remove(); hD.remove(); hF.remove(); resolve(rewarded); } };
-      const hR = await AdMob.addListener(RewardAdPluginEvents.Rewarded, () => { rewarded = true; });
-      const hD = await AdMob.addListener(RewardAdPluginEvents.Dismissed, () => setTimeout(finish, 50));
-      const hF = await AdMob.addListener(RewardAdPluginEvents.FailedToShow, finish);
-      try { await AdMob.showRewardVideoAd(); } catch { finish(); }
+      let hR, hD, hF;
+      const finish = () => { if (!done) { done = true; rewardInFlight = null; hR?.remove(); hD?.remove(); hF?.remove(); resolve(rewarded); } };
+      hR = await AdMob.addListener(RewardAdPluginEvents.Rewarded, () => { rewarded = true; });
+      hD = await AdMob.addListener(RewardAdPluginEvents.Dismissed, () => setTimeout(finish, 50));
+      hF = await AdMob.addListener(RewardAdPluginEvents.FailedToShow, finish);
+      try { await AdMob.showRewardVideoAd(); } catch { finish(); ads.preloadRewarded(); }
       setTimeout(finish, 120_000);
     });
+    return rewardInFlight;
   },
 
   async showBanner() {
@@ -170,7 +180,8 @@ export const ads = {
   },
   async hideBanner() {
     if (!isNative || !bannerVisible) return;
-    try { await AdMob.hideBanner(); } catch {}
+    // hideBanner leaves a paused view that a later showBanner won't revive; destroy it instead
+    try { await AdMob.removeBanner(); } catch {}
     bannerVisible = false;
     listeners.bannerSize.forEach(f => f(0));
   },
