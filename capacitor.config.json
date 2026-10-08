@@ -1,0 +1,17 @@
+{
+  "appId": "com.mohitaggarwal.randomapp",
+  "appName": "Random App",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#111111"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0,
+      "launchAutoHide": true,
+      "backgroundColor": "#111111"
+    },
+    "AdMob": {}
+  }
+}

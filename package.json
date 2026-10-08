@@ -1,0 +1,30 @@
+{
+  "name": "random-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mobile game (HTML5 Canvas + Capacitor Android)",
+  "scripts": {
+    "bundle": "esbuild src/main.js --bundle --minify --sourcemap --format=iife --target=es2018 --outfile=www/app.js",
+    "watch": "esbuild src/main.js --bundle --sourcemap --format=iife --target=es2018 --outfile=www/app.js --watch --servedir=www",
+    "sync": "npm run bundle && npx cap sync android",
+    "build:apk": "npm run sync && cd android && gradlew.bat assembleDebug",
+    "build:aab": "npm run sync && cd android && gradlew.bat bundleRelease"
+  },
+  "dependencies": {
+    "@capacitor-community/admob": "^7.0.0",
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.1.9",
+    "@capacitor/haptics": "^7.0.0",
+    "@capacitor/preferences": "^7.0.0",
+    "@capacitor/share": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "esbuild": "^0.28.2"
+  }
+}
